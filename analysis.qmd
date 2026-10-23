@@ -14,18 +14,12 @@ library(duckdb)
 library(dbplyr)
 ```
 
-```{r}
-con_seda <- dbConnect(
-  duckdb::duckdb(),
-  "data/seda_2025.duckdb",
-  read_only = TRUE
-)
-
-dbplyr_dist <- tbl(con_seda, "district_scores")
-```
 
 
 ```{r}
+#| message: false
+#| warning: false
+
 con_seda <- dbConnect(
   duckdb::duckdb(),
   "data/seda_2025.duckdb",
@@ -34,6 +28,7 @@ con_seda <- dbConnect(
 
 dbplyr_dist <- tbl(con_seda, "district_scores")
 dbplyr_state <- tbl(con_seda, "state_scores")
+
 ```
 
 ```{r}
