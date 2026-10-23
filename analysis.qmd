@@ -2,5 +2,138 @@
 title: "Analyzing School District Reading Scores"
 author: "Gabriella Buccellato"
 format: html
+execute:
+  echo: false
 ---
 
+```{r}
+#| message: false
+library(tidyverse) 
+library(DBI)
+library(duckdb)
+library(dbplyr)
+```
+
+```{r}
+con_seda <- dbConnect(
+  duckdb::duckdb(),
+  "data/seda_2025.duckdb",
+  read_only = TRUE
+)
+
+dbplyr_dist <- tbl(con_seda, "district_scores")
+```
+
+
+```{r}
+con_seda <- dbConnect(
+  duckdb::duckdb(),
+  "data/seda_2025.duckdb",
+  read_only = TRUE
+)
+
+dbplyr_dist <- tbl(con_seda, "district_scores")
+dbplyr_state <- tbl(con_seda, "state_scores")
+```
+
+```{r}
+#| cache: true
+#| cache.extra: !expr file.mtime("data/seda_2025.duckdb")
+score_change <- dbplyr_dist |>
+  filter(year %in% c(2015, 2023), !is.na(rla_score)) |>
+  group_by(district_id) |>
+  summarise(
+    score_2015 = max(if_else(year == 2015, rla_score, NA_real_), na.rm = TRUE),
+    score_2023 = max(if_else(year == 2023, rla_score, NA_real_), na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(score_2015), !is.na(score_2023)) |>
+  mutate(change = score_2023 - score_2015) |>
+  collect()
+
+dbplyr_state <- tbl(con_seda, "state_scores")
+
+state_change <- dbplyr_state |>
+  filter(year %in% c(2015, 2023), !is.na(rla_score)) |>
+  group_by(stateabb) |>
+  summarise(
+    score_2015 = max(if_else(year == 2015, rla_score, NA_real_), na.rm = TRUE),
+    score_2023 = max(if_else(year == 2023, rla_score, NA_real_), na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(score_2015), !is.na(score_2023)) |>
+  mutate(change = score_2023 - score_2015) |>
+  collect()
+```
+
+```{r}
+#| message: false
+
+ggplot(score_change, aes(x = change, fill = change > 0)) +
+  geom_histogram(bins = 30, color = "white") +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 1) +
+  scale_fill_manual(
+    values = c("TRUE" = "forestgreen", "FALSE" = "tomato"),
+    guide = "none"
+  ) +
+  labs(
+    title = "Distribution of District Reading Score Changes",
+    subtitle = paste("Districts with data in both years:", nrow(score_change)),
+    x = "Change in RLA score (2023 - 2015)",
+    y = "Number of districts",
+    caption = "Positive values indicate improvement; negative values indicate declines."
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| fig-height: 10
+#| fig-width: 9
+#| out-width: 85%
+
+plot_data <- state_change |>
+  arrange(score_2023) |>
+  mutate(stateabb = factor(stateabb, levels = stateabb))
+
+ggplot(plot_data, aes(y = stateabb)) +
+  geom_segment(
+    aes(
+      x = score_2015,
+      xend = score_2023,
+      yend = stateabb,
+      color = change > 0
+    ),
+    arrow = arrow(length = grid::unit(2, "mm")),
+    linewidth = 0.8
+  ) +
+  geom_point(
+    aes(x = score_2015),
+    color = "gray60",
+    size = 2.5
+  ) +
+  scale_color_manual(
+    values = c("TRUE" = "forestgreen", "FALSE" = "tomato"),
+    guide = "none"
+  ) +
+  scale_y_discrete(
+    labels = function(x) as.character(x),
+    drop = FALSE
+  ) +
+  labs(
+    title = "State Reading Score Changes, 2015–2023",
+    subtitle = "States ordered by their 2023 reading scores",
+    x = "RLA score",
+    y = NULL,
+    caption = "Gray dots mark 2015 scores; arrows point toward 2023. Green indicates increases; red indicates no increase."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 10, color = "black"),
+    axis.text.x = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    plot.caption = element_text(size = 9, hjust = 0)
+  )
+
+```
